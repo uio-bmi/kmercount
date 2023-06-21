@@ -26,9 +26,6 @@ constexpr unsigned int memchunk {1 << 20};  // 1 megabyte
 constexpr unsigned int linealloc {2048};
 constexpr long unsigned int n_chars {INT8_MAX + 1};  // 128 ascii chars
 constexpr unsigned int max_sequence_length {999999999};
-// for longer sequences, 'zobrist_tab_byte_base' is bigger than 8 x
-// 2^32 (512 x max_sequence_length) and cannot be addressed with
-// uint32 pointers, which leads to a segmentation fault
 constexpr unsigned int max_header_length {16777216 - 1};  // 2^24 minus 1
 
 auto make_nt_map () -> std::array<signed char, n_chars> {
@@ -70,15 +67,8 @@ struct seqinfo_s
 {
   char * header;
   char * seq;
-  uint64_t abundance;
-  uint64_t hdrhash;
-  uint64_t seqhash;
   int headerlen;
   unsigned int seqlen;
-  unsigned int clusterid;
-  int abundance_start;
-  int abundance_end;
-  int dummy; /* alignment padding only */
 };
 
 using seqinfo_t = struct seqinfo_s;
@@ -103,8 +93,6 @@ auto db_getlongestsequence() -> unsigned int
 {
   return longest;
 }
-
-
 
 void db_read(const char * filename, struct Parameters const & p)
 {
@@ -346,13 +334,10 @@ void db_read(const char * filename, struct Parameters const & p)
   fclose(input_fp);
 
 
-
   /* create indices */
 
   seqindex = new seqinfo_t[sequences];
   seqinfo_t * seqindex_p {seqindex};
-
-
 
   char * pl {datap};
   progress_init("Indexing database:", sequences);
@@ -373,11 +358,6 @@ void db_read(const char * filename, struct Parameters const & p)
       seqindex_p->seq = pl;
       pl += nt_bytelength(seqlen);
 
-
-
-
-
-
       seqindex_p++;
       progress_update(i);
     }
@@ -390,15 +370,10 @@ void db_read(const char * filename, struct Parameters const & p)
   linecap = 0;
 
   // user report
-  fprintf(logfile, "Database info:     %" PRIu64 " nt", db_getnucleotidecount());
+  fprintf(logfile, "Database info:     %" PRIu64 " nt",
+	  db_getnucleotidecount());
   fprintf(logfile, " in %u sequences,", db_getsequencecount());
   fprintf(logfile, " longest %u nt\n", db_getlongestsequence());
-}
-
-
-auto db_gethash(uint64_t seqno) -> uint64_t
-{
-  return seqindex[seqno].seqhash;
 }
 
 
@@ -426,12 +401,6 @@ auto db_getsequencelen(uint64_t seqno) -> unsigned int
 auto db_getheader(uint64_t seqno) -> char *
 {
   return seqindex[seqno].header;
-}
-
-
-auto db_getabundance(uint64_t seqno) -> uint64_t
-{
-  return seqindex[seqno].abundance;
 }
 
 
