@@ -286,7 +286,6 @@ void kmercount(const char * kmer_filename, const char * seq_filename)
   progress_done();
 
   fprintf(logfile,   "Unique kmers:      %llu\n", unique);
-
   if (duplicates > 0)
     fprintf(logfile, "Duplicates:        %llu\n", duplicates);
 
@@ -341,7 +340,7 @@ void kmercount(const char * kmer_filename, const char * seq_filename)
       progress_update(i);
     }
   progress_done();
-  
+
   fprintf(logfile, "Matching kmers:    %u\n", x);
   fprintf(logfile, "Total matches:     %llu\n", y);
 
