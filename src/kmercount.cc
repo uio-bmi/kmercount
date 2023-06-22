@@ -3,6 +3,8 @@
 
 #include "main.h"
 
+#define FIXEDK31
+const unsigned int k = 31;
 
 struct hashentry
 {
@@ -90,8 +92,8 @@ inline uint64_t hash_update_31(uint64_t h, uint64_t out, uint64_t in)
   return hash;
 }
 
-bool is_indexing = false;
 static uint64_t duplicates = 0;
+static uint64_t unique = 0;
 FILE * fp_index = nullptr;
 
 void hash_insert(uint64_t hash,
@@ -105,28 +107,19 @@ void hash_insert(uint64_t hash,
     {
       uint64_t kmerfound = seqhashtable[seqhashindex].kmer;
 
-      if (kmerfound == kmer)
-	{
-	  /* slot in use, with match */
-	  duplicates++;
-	  seqhashtable[seqhashindex].count++;
-	  return;
-	}
-
       if (kmerfound == (uint64_t) - 1)
 	{
 	  /* free slot, not seen before, insert new */
 	  seqhashtable[seqhashindex].kmer = kmer;
+	  seqhashtable[seqhashindex].count = 0;
+	  unique++;
+	  return;
+	}
 
-	  if (is_indexing)
-	    {
-	      fwrite(& kmer, 8, 1, fp_index);
-	      seqhashtable[seqhashindex].count = 1;
-	    }
-	  else
-	    {
-	      seqhashtable[seqhashindex].count = 0;
-	    }
+      if (kmerfound == kmer)
+	{
+	  /* slot in use, with match */
+	  duplicates++;
 	  return;
 	}
 
@@ -165,10 +158,6 @@ inline void hash_count(uint64_t hash,
 
 void kmer_check(unsigned int seqlen, char * seq, bloomflex_s * bloom, hashentry * seqhashtable, uint64_t seqhashsize)
 {
-  /* find and hash all kmers in a sequence */
-  /* 1 <= k <= 32 */
-
-  const unsigned int k = 31;
   uint64_t kmer = 0;
   uint64_t h = 0;
 
@@ -198,21 +187,33 @@ void kmer_check(unsigned int seqlen, char * seq, bloomflex_s * bloom, hashentry 
       kmer |= in << (2*(k-1));
       mem >>= 2;
 
-      //h = hash_update(k, h, out, in);
+#ifdef FIXEDK31
       h = hash_update_31(h, out, in);
+#else
+      h = hash_update(k, h, out, in);
+#endif
+
       if (bloomflex_get(bloom, h))
 	hash_count(h, kmer, seqhashtable, seqhashsize);
     }
 }
 
+void fprintseq(FILE * fp, uint64_t kmer)
+{
+  char sym_nt[5] = "ACGT";
+  char buffer[33];
+  for (unsigned int i = 0; i < k; i++)
+    buffer[i] = sym_nt[(kmer >> 2*i) & 3];
+  buffer[k] = 0;
+  fprintf(fp, "%s", buffer);
+}
+
+
 void kmer_insert(unsigned int seqlen, char * seq, bloomflex_s * bloom, hashentry * seqhashtable, uint64_t seqhashsize)
 {
-  (void) bloom;
-
-  /* find and hash all kmers (minimizers) in a sequence */
+  /* find and hash all kmers in a sequence */
   /* 1 <= k <= 32 */
 
-  const unsigned int k = 31;
   uint64_t kmer = 0;
   uint64_t h = 0;
 
@@ -237,8 +238,11 @@ void kmer_insert(unsigned int seqlen, char * seq, bloomflex_s * bloom, hashentry
 	      if (i == k - 1)
 		h = hash_full(k, kmer);
 	      else
-		//h = hash_update(k, h, out, in);
+#ifdef FIXEDK31
 		h = hash_update_31(h, out, in);
+#else
+		h = hash_update(k, h, out, in);
+#endif
 
 	      bloomflex_set(bloom, h);
 	      hash_insert(h, kmer, seqhashtable, seqhashsize);
@@ -247,22 +251,20 @@ void kmer_insert(unsigned int seqlen, char * seq, bloomflex_s * bloom, hashentry
     }
 }
 
-void prepare_index(struct Parameters const & p)
+void kmercount(const char * kmer_filename, const char * seq_filename)
 {
-  /* Read FASTA with kmers, produce index file */
-  db_read(p.input_filename.c_str(), p);
+  (void) kmer_filename;
 
-  fp_index = fopen("index.bin", "w");
-  if (!fp_index)
-    fatal("Cant open index.bin");
+  /* Read FASTA with kmers */
+  fprintf(logfile, "Reading kmer file\n");
+  struct db_s * kmer_db = db_read(kmer_filename);
+  unsigned int kmer_count = db_getsequencecount(kmer_db);
 
-  unsigned int seqcount = db_getsequencecount();
-
-  bloomflex_s * bloom = bloomflex_init(seqcount, 8);
+  /* set up Bloom filter, 1 byte per kmer, 4 of 8 bits set */
+  bloomflex_s * bloom = bloomflex_init(kmer_count, 4);
 
   /* set up hashtable */
-
-  const uint64_t seqhashsize = 2 * seqcount;
+  const uint64_t seqhashsize = 2 * kmer_count;
   struct hashentry * seqhashtable = nullptr;
   seqhashtable = new hashentry [seqhashsize] { };
   for (uint64_t j = 0; j < seqhashsize; j++)
@@ -271,131 +273,80 @@ void prepare_index(struct Parameters const & p)
       seqhashtable[j].kmer = -1;
     }
 
-
-  /* compute hash for all amplicons and store them in a hash table */
-
-  progress_init("Analyse sequences:", seqcount);
-
-  for(unsigned int i = 0; i < seqcount; i++)
+  /* compute hash for all kmers and store them in bloom & hash table */
+  progress_init("Indexing kmers:   ", kmer_count);
+  for(unsigned int i = 0; i < kmer_count; i++)
     {
       char * seq;
       unsigned int seqlen;
-      db_getsequenceandlength(i, & seq, & seqlen);
+      db_getsequenceandlength(kmer_db, i, & seq, & seqlen);
       kmer_insert(seqlen, seq, bloom, seqhashtable, seqhashsize);
       progress_update(i);
     }
-
   progress_done();
 
-  printf("Duplicates: %llu\n", duplicates);
+  fprintf(logfile,   "Unique kmers:      %llu\n", unique);
 
-  delete [] seqhashtable;
-  seqhashtable = nullptr;
+  if (duplicates > 0)
+    fprintf(logfile, "Duplicates:        %llu\n", duplicates);
 
-  bloomflex_exit(bloom);
+  db_free(kmer_db);
 
-  fclose(fp_index);
-}
+  fprintf(logfile, "\n");
 
-void perform_kmer_count(struct Parameters const & p)
-{
-  (void)p;
-
-  /* Read index file */
-
-  struct stat buf;
-  int ret = stat("index.bin", &buf);
-  if (ret != 0)
-    fatal("Can not stat index.bin");
-
-  fp_index = fopen("index.bin", "r");
-  if (!fp_index)
-    fatal("Can not open index.bin");
-
-  int kmercount = buf.st_size / 8;
-
-  printf("Reading %d kmers...", kmercount);
-  uint64_t * kmers = (uint64_t *) xmalloc(kmercount * 8);
-  fread(kmers, 8, kmercount, fp_index);
-  printf(" Done\n");
-
-  /* Bloom filter, 1 byte per kmer */
-  bloomflex_s * bloom = bloomflex_init(kmercount, 4);
-
-  /* set up hashtable, 2 slots per kmer */
-
-  const uint64_t seqhashsize = 2 * kmercount;
-  struct hashentry * seqhashtable = nullptr;
-  seqhashtable = new hashentry [seqhashsize] { };
-  for (uint64_t j = 0; j < seqhashsize; j++)
-    {
-      seqhashtable[j].count = 0;
-      seqhashtable[j].kmer = -1;
-    }
-
-
-  /* compute hash for all amplicons and store them in a hash table */
-
-  progress_init("Inserting kmers/hash:", kmercount);
-  for(int i = 0; i < kmercount; i++)
-    {
-      kmer_insert(31, (char*) (kmers + i), bloom, seqhashtable, seqhashsize);
-      progress_update(i);
-    }
-  progress_done();
-
-
-  /* Read FASTA */
-  printf("Reading FASTA file...");
-  db_read(p.input_filename.c_str(), p);
-  int db_seqcount = db_getsequencecount();
-  printf("Done\n");
-
+  /* Read FASTA sequence file */
+  fprintf(logfile, "Reading sequence file\n");
+  struct db_s * seq_db = db_read(seq_filename);
+  int seq_count = db_getsequencecount(seq_db);
+  uint64_t seq_nucleotides = db_getnucleotides(seq_db);
 
   /* Compute hash for all kmers in db and count */
-  progress_init("Analyse sequences:", db_seqcount);
-  for(int i = 0; i < db_seqcount; i++)
+  progress_init("Counting matches: ", seq_nucleotides);
+  uint64_t nt_processed = 0;
+  for(int i = 0; i < seq_count; i++)
     {
       char * seq;
       unsigned int seqlen;
-      db_getsequenceandlength(i, & seq, & seqlen);
+      db_getsequenceandlength(seq_db, i, & seq, & seqlen);
       kmer_check(seqlen, seq, bloom, seqhashtable, seqhashsize);
-      progress_update(i);
+      nt_processed += seqlen;
+      progress_update(nt_processed);
     }
   progress_done();
 
+  fprintf(logfile, "\n");
 
-  /* Print out kmer, hash, and count, only 50 first */
-  int x = 0;
+
+  /* Print kmers and counts to output file */
+  unsigned int x = 0;
+  uint64_t y = 0;
+  progress_init("Writing results", seqhashsize);
   for (uint64_t i = 0; i < seqhashsize; i++)
     {
       struct hashentry * e = seqhashtable + i;
-      if ((e->kmer != (uint64_t)-1) && (e->count > 0))
-	{
-	  printf("kmer %016llx hash %016llx count %llu\n",
-		 e->kmer, hash_full(31, e->kmer), e->count);
-	  x++;
-	}
-      if (x >= 1)
-	break;
+      if (e->kmer != (uint64_t)-1)
+	if (e->count > 0)
+	  {
+#if 0
+	    fprintf(outfile, ">kmer%u\n", x+1);
+	    fprintseq(outfile, e->kmer);
+	    fprintf(outfile, "\n");
+#else
+	    fprintseq(outfile, e->kmer);
+	    fprintf(outfile,"\t%llu\n", e->count);
+#endif
+	    x++;
+	    y += e->count;
+	  }
+      progress_update(i);
     }
+  progress_done();
+  
+  fprintf(logfile, "Matching kmers:    %u\n", x);
+  fprintf(logfile, "Total matches:     %llu\n", y);
 
   delete [] seqhashtable;
   seqhashtable = nullptr;
   bloomflex_exit(bloom);
-  fclose(fp_index);
-}
-
-void kmercount(struct Parameters const & p)
-{
-  if (0)
-    {
-      is_indexing = true;
-      prepare_index(p);
-    }
-  else
-    {
-      is_indexing = false;
-      perform_kmer_count(p);
-    }
+  db_free(seq_db);
 }

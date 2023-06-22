@@ -19,34 +19,15 @@
     PO Box 1080 Blindern, NO-0316 Oslo, Norway
 */
 
-void db_read(const char * filename, struct Parameters const & p);
+struct db_s * db_read(const char * filename);
 
-auto db_getsequencecount() -> unsigned int;
+unsigned int db_getsequencecount(struct db_s * d);
 
-auto db_getnucleotidecount() -> uint64_t;
+uint64_t db_getnucleotides(struct db_s * d);
 
-auto db_getlongestheader() -> unsigned int;
-
-auto db_getlongestsequence() -> unsigned int;
-
-auto db_getseqinfo(uint64_t seqno) -> struct seqinfo_s *;
-
-auto db_getsequence(uint64_t seqno) -> char *;
-
-auto db_getsequencelen(uint64_t seqno) -> unsigned int;
-
-void db_getsequenceandlength(uint64_t seqno,
+void db_getsequenceandlength(struct db_s * d,
+			     uint64_t seqno,
                              char ** address,
                              unsigned int * length);
 
-auto db_getheader(uint64_t seqno) -> char *;
-
-auto db_getheaderlen(uint64_t seqno) -> unsigned int;
-
-void db_showall();
-
-void db_free();
-
-void db_putseq(int64_t seqno);
-
-auto db_fprintseq(std::FILE * fastaout_fp, unsigned int seqno) -> void;
+void db_free(struct db_s * d);

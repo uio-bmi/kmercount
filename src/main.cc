@@ -59,7 +59,7 @@ const std::vector<std::string> header_message
 const std::vector<std::string> args_usage_message
   /*0         1         2         3         4         5         6         7          */
   /*01234567890123456789012345678901234567890123456789012345678901234567890123456789 */
-  {"Usage: kmercount [OPTIONS] [FASTAFILE]\n",
+  {"Usage: kmercount [OPTIONS] KMERFILE [FASTAFILE]\n",
    "\n",
    "General options:\n",
    " -h, --help                          display this help and exit\n",
@@ -76,7 +76,6 @@ const std::vector<std::string> args_usage_message
 #endif
    "\n"
   };
-
 
 auto args_long(char * str, const char * option) -> int64_t;
 void args_show();
@@ -113,7 +112,8 @@ void args_show()
   cpu_features_show(p);
 #endif
 
-  fprintf(logfile, "Database file:     %s\n", p.input_filename.c_str());
+  fprintf(logfile, "Kmer file:         %s\n", p.kmer_filename.c_str());
+  fprintf(logfile, "Sequence file:     %s\n", p.seq_filename.c_str());
   fprintf(logfile, "Output file:       %s\n", p.opt_output_file.c_str());
   fprintf(logfile, "Threads:           %" PRId64 "\n", opt_threads);
   fprintf(logfile, "\n");
@@ -203,10 +203,20 @@ void args_init(int argc, char **argv, std::array<int, n_options> & used_options)
     }
   }
 
-  if (optind < argc) {  // external variable defined in unistd.h for
-                        // use with the getopt function
-    p.input_filename = argv[optind];
-  }
+  if (optind < argc)
+    {
+      if (optind + 1 < argc)
+	{
+	  p.kmer_filename = argv[optind];
+	  p.seq_filename = argv[optind + 1];
+	}
+      else
+	{
+	  p.kmer_filename = argv[optind];
+	}
+    }
+  else
+    fatal("At least one filename must be specified (kmer file)");
 }
 
 
@@ -268,16 +278,11 @@ auto close_files() -> void {
 
 auto main(int argc, char** argv) -> int
 {
-  // initialization and checks
   args_init(argc, argv, used_options);
   args_check(used_options);
   open_files();
   show(header_message);
   args_show();
-
-  kmercount(p);
-
-  // clean up
-  db_free();
+  kmercount(p.kmer_filename.c_str(), p.seq_filename.c_str());
   close_files();
 }

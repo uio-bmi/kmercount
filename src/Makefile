@@ -84,7 +84,7 @@ PROG = kmercount
 OBJS = arch.o bloomflex.o db.o main.o util.o fatal.o kmercount.o
 
 DEPS = Makefile \
-	arch.h bloomflex.h db.h pseudo_rng.h main.h util.h fatal.h kmercount.h
+	arch.h bloomflex.h db.h pseudo_rng.h main.h util.h fatal.h
 
 all : $(PROG)
 

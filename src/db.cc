@@ -24,91 +24,63 @@
 
 constexpr unsigned int memchunk {1 << 20};  // 1 megabyte
 constexpr unsigned int linealloc {2048};
-constexpr long unsigned int n_chars {INT8_MAX + 1};  // 128 ascii chars
-constexpr unsigned int max_sequence_length {999999999};
-constexpr unsigned int max_header_length {16777216 - 1};  // 2^24 minus 1
 
-auto make_nt_map () -> std::array<signed char, n_chars> {
-    // set the 128 ascii chars to '-1' except Aa, Cc, Gg, Tt and Uu
-  std::array<signed char, n_chars> ascii_map {{0}};
-    ascii_map.fill(-1);
-    ascii_map['A'] = 1;
-    ascii_map['a'] = 1;
-    ascii_map['C'] = 2;
-    ascii_map['c'] = 2;
-    ascii_map['G'] = 3;
-    ascii_map['g'] = 3;
-    ascii_map['T'] = 4;
-    ascii_map['t'] = 4;
-    ascii_map['U'] = 4;
-    ascii_map['u'] = 4;
-    ascii_map['N'] = 1;
-    ascii_map['n'] = 1;
-    return ascii_map;
-    }
-
-const auto map_nt = make_nt_map();
-
-const std::array<char, 32> sym_nt =
-  {'-', 'A', 'C', 'G', 'T', ' ', ' ', ' ',
-   ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ',
-   ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ',
-   ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '};
-
-
-static unsigned int sequences {0};
-static uint64_t nucleotides {0};
-static uint64_t headerchars {0};
-static unsigned int longest {0};
-static unsigned int longestheader {0};
-static char * datap {nullptr};
+static const signed char map_nt[256] =
+  {
+    // AaNn = 0, Cc = 1, Gg = 2, TtUu = 3, rest = -1
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1,  0, -1,  1, -1, -1, -1,  2, -1, -1, -1, -1, -1, -1,  0, -1,
+    -1, -1, -1, -1,  3,  3, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1,  0, -1,  1, -1, -1, -1,  2, -1, -1, -1, -1, -1, -1,  0, -1,
+    -1, -1, -1, -1,  3,  3, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1
+  };
 
 struct seqinfo_s
 {
-  char * header;
   char * seq;
-  int headerlen;
   unsigned int seqlen;
 };
 
-using seqinfo_t = struct seqinfo_s;
-extern seqinfo_t * seqindex;
-
-seqinfo_t * seqindex {nullptr};
-
-
-auto db_getnucleotidecount() -> uint64_t
+struct db_s
 {
-  return nucleotides;
+  unsigned int sequences;
+  uint64_t nucleotides;
+  unsigned int longest;
+  char * datap;
+  struct seqinfo_s * seqindex {nullptr};
+};
+
+unsigned int db_getsequencecount(struct db_s * d)
+{
+  return d->sequences;
 }
 
-
-auto db_getsequencecount() -> unsigned int
+struct db_s * db_read(const char * filename)
 {
-  return sequences;
-}
+  struct db_s * d = (struct db_s *) xmalloc(sizeof(struct db_s));
 
-
-auto db_getlongestsequence() -> unsigned int
-{
-  return longest;
-}
-
-void db_read(const char * filename, struct Parameters const & p)
-{
-  (void) p;
+  d->sequences = 0;
+  d->nucleotides = 0;
+  d->longest = 0;
+  d->datap = nullptr;
+  d->seqindex = nullptr;
 
   /* allocate space */
 
   uint64_t dataalloc {memchunk};
-  datap = static_cast<char *>(xmalloc(dataalloc));
+  d->datap = static_cast<char *>(xmalloc(dataalloc));
   uint64_t datalen {0};
-
-  longest = 0;
-  longestheader = 0;
-  sequences = 0;
-  nucleotides = 0;
-  headerchars = 0;
 
   /* open input file or stream */
 
@@ -160,40 +132,16 @@ void db_read(const char * filename, struct Parameters const & p)
         fatal(error_prefix, "Illegal header line in fasta file.");
       }
 
-      auto headerlen = static_cast<unsigned int>
-        (strcspn(line + 1, " \r\n"));
-
-      headerchars += headerlen;
-
-      if (headerlen > longestheader) {
-        longestheader = headerlen;
-      }
-
-      if (longestheader > max_header_length) {
-        fatal(error_prefix, "Headers longer than 16,777,215 symbols are not supported.");
-      }
 
       /* store the line number */
 
       while (datalen + sizeof(unsigned int) > dataalloc)
         {
           dataalloc += memchunk;
-          datap = static_cast<char *>(xrealloc(datap, dataalloc));
+          d->datap = static_cast<char *>(xrealloc(d->datap, dataalloc));
         }
-      memcpy(datap + datalen, & lineno, sizeof(unsigned int));
+      memcpy(d->datap + datalen, & lineno, sizeof(unsigned int));
       datalen += sizeof(unsigned int);
-
-
-      /* store the header */
-
-      while (datalen + headerlen + 1 > dataalloc)
-        {
-          dataalloc += memchunk;
-          datap = static_cast<char *>(xrealloc(datap, dataalloc));
-        }
-      memcpy(datap + datalen, line + 1, headerlen);
-      *(datap + datalen + headerlen) = 0;
-      datalen += headerlen + 1;
 
 
       /* get next line */
@@ -216,10 +164,10 @@ void db_read(const char * filename, struct Parameters const & p)
       while (datalen + sizeof(unsigned int) > dataalloc)
         {
           dataalloc += memchunk;
-          datap = static_cast<char *>(xrealloc(datap, dataalloc));
+          d->datap = static_cast<char *>(xrealloc(d->datap, dataalloc));
         }
       uint64_t datalen_seqlen = datalen;
-      memcpy(datap + datalen, & length, sizeof(unsigned int));
+      memcpy(d->datap + datalen, & length, sizeof(unsigned int));
       datalen += sizeof(unsigned int);
 
 
@@ -242,7 +190,7 @@ void db_read(const char * filename, struct Parameters const & p)
               signed char m {0};
               if ((m = map_nt[static_cast<unsigned int>(c)]) >= 0)
                 {
-                  nt_buffer |= ((static_cast<uint64_t>(m))-1) << (2 * nt_bufferlen);
+                  nt_buffer |= ((static_cast<uint64_t>(m))) << (2 * nt_bufferlen);
                   length++;
                   nt_bufferlen++;
 
@@ -251,10 +199,10 @@ void db_read(const char * filename, struct Parameters const & p)
                       while (datalen + sizeof(nt_buffer) > dataalloc)
                         {
                           dataalloc += memchunk;
-                          datap = static_cast<char *>(xrealloc(datap, dataalloc));
+                          d->datap = static_cast<char *>(xrealloc(d->datap, dataalloc));
                         }
 
-                      memcpy(datap + datalen, & nt_buffer, sizeof(nt_buffer));
+                      memcpy(d->datap + datalen, & nt_buffer, sizeof(nt_buffer));
                       datalen += sizeof(nt_buffer);
 
                       nt_bufferlen = 0;
@@ -274,11 +222,6 @@ void db_read(const char * filename, struct Parameters const & p)
                 }
             }
 
-          /* check length of longest sequence */
-          if (length > max_sequence_length) {
-            fatal(error_prefix, "Sequences longer than 67,108,861 symbols are not supported.");
-          }
-
           linelen = xgetline(& line, & linecap, input_fp);
           if (linelen < 0)
             {
@@ -292,17 +235,17 @@ void db_read(const char * filename, struct Parameters const & p)
 
       /* fill in real length */
 
-      memcpy(datap + datalen_seqlen, & length, sizeof(unsigned int));
+      memcpy(d->datap + datalen_seqlen, & length, sizeof(unsigned int));
 
       if (length == 0)
         {
           fatal(error_prefix, "Empty sequence found on line ", lineno - 1, ".");
         }
 
-      nucleotides += length;
+      d->nucleotides += length;
 
-      if (length > longest) {
-        longest = length;
+      if (length > d->longest) {
+        d->longest = length;
       }
 
 
@@ -313,17 +256,17 @@ void db_read(const char * filename, struct Parameters const & p)
           while (datalen + sizeof(nt_buffer) > dataalloc)
             {
               dataalloc += memchunk;
-              datap = static_cast<char *>(xrealloc(datap, dataalloc));
+              d->datap = static_cast<char *>(xrealloc(d->datap, dataalloc));
             }
 
-          memcpy(datap + datalen, & nt_buffer, sizeof(nt_buffer));
+          memcpy(d->datap + datalen, & nt_buffer, sizeof(nt_buffer));
           datalen += sizeof(nt_buffer);
 
           nt_buffer = 0;
           nt_bufferlen = 0;  // that value is never read again, all tests pass without it
         }
 
-      sequences++;
+      d->sequences++;
 
       if (is_regular) {
         progress_update(filepos);
@@ -336,20 +279,15 @@ void db_read(const char * filename, struct Parameters const & p)
 
   /* create indices */
 
-  seqindex = new seqinfo_t[sequences];
-  seqinfo_t * seqindex_p {seqindex};
+  d->seqindex = (struct seqinfo_s *) xmalloc(d->sequences * sizeof(struct seqinfo_s));
+  struct seqinfo_s * seqindex_p = d->seqindex;
 
-  char * pl {datap};
-  progress_init("Indexing database:", sequences);
-  for(auto i = 0ULL; i < sequences; i++)
+  char * pl = d->datap;
+  progress_init("Indexing database:", d->sequences);
+  for(auto i = 0ULL; i < d->sequences; i++)
     {
       /* get line number */
       pl += sizeof(unsigned int);
-
-      /* get header */
-      seqindex_p->header = pl;
-      seqindex_p->headerlen = static_cast<int>(strlen(seqindex_p->header));
-      pl += seqindex_p->headerlen + 1;
 
       /* and sequence */
       unsigned int seqlen = *(reinterpret_cast<unsigned int*>(pl));
@@ -361,71 +299,42 @@ void db_read(const char * filename, struct Parameters const & p)
       seqindex_p++;
       progress_update(i);
     }
-
-
   progress_done();
 
   delete [] line;
   line = nullptr;
   linecap = 0;
 
-  // user report
-  fprintf(logfile, "Database info:     %" PRIu64 " nt",
-	  db_getnucleotidecount());
-  fprintf(logfile, " in %u sequences,", db_getsequencecount());
-  fprintf(logfile, " longest %u nt\n", db_getlongestsequence());
+  fprintf(logfile, "Database info:     %" PRIu64 " nt", d->nucleotides);
+  fprintf(logfile, " in %u sequences,", d->sequences);
+  fprintf(logfile, " longest %u nt\n", d->longest);
+
+  return d;
 }
 
 
-auto db_getsequence(uint64_t seqno) -> char *
-{
-  return seqindex[seqno].seq;
-}
-
-
-void db_getsequenceandlength(uint64_t seqno,
+void db_getsequenceandlength(struct db_s * d,
+			     uint64_t seqno,
                              char ** address,
                              unsigned int * length)
 {
-  *address = seqindex[seqno].seq;
-  *length = seqindex[seqno].seqlen;
+  *address = d->seqindex[seqno].seq;
+  *length = d->seqindex[seqno].seqlen;
+}
+
+uint64_t db_getnucleotides(struct db_s * d)
+{
+  return d->nucleotides;
 }
 
 
-auto db_getsequencelen(uint64_t seqno) -> unsigned int
+void db_free(struct db_s * d)
 {
-  return seqindex[seqno].seqlen;
-}
+  if (d->datap)
+    xfree(d->datap);
+  d->datap = nullptr;
 
-
-auto db_getheader(uint64_t seqno) -> char *
-{
-  return seqindex[seqno].header;
-}
-
-
-void db_free()
-{
-  if (datap != nullptr) {
-    xfree(datap);
-  }
-  datap = nullptr;
-  delete [] seqindex;
-  seqindex = nullptr;
-}
-
-
-auto db_fprintseq(std::FILE * fastaout_fp, const unsigned int seqno) -> void
-{
-  const unsigned int len {db_getsequencelen(seqno)};
-  char * const seqptr {db_getsequence(seqno)};
-  static std::vector<char> buffer(db_getlongestsequence() + 1, '\0');
-
-  // decode to nucleotides (A, C, G and T)
-  for(auto i = 0U; i < len; i++) {
-    buffer[i] = sym_nt[1 + nt_extract(seqptr, i)];
-  }
-  buffer[len] = '\0';
-
-  fprintf(fastaout_fp, "%.*s\n", len, buffer.data());
+  if (d->seqindex)
+    xfree(d->seqindex);
+  d->seqindex = nullptr;
 }

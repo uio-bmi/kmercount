@@ -136,7 +136,8 @@ extern queryinfo_t query;
 struct Parameters {
   bool opt_help {false};
   bool opt_version {false};
-  std::string input_filename {dash_filename};
+  std::string kmer_filename {dash_filename};
+  std::string seq_filename {dash_filename};
   std::string opt_output_file {dash_filename};
 };
 
@@ -172,4 +173,4 @@ inline auto nt_bytelength(unsigned int len) -> unsigned int
 
 /* functions in kmercount.cc */
 
-void kmercount(struct Parameters const & p);
+void kmercount(const char * kmer_filename, const char * seq_filename);
