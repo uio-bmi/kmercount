@@ -3,8 +3,7 @@
 
 #include "main.h"
 
-#define FIXEDK31
-const unsigned int k = 31;
+static unsigned int k = 31;
 
 struct hashentry
 {
@@ -176,25 +175,44 @@ void kmer_check(unsigned int seqlen, char * seq, bloomflex_s * bloom, hashentry 
   if (bloomflex_get(bloom, h))
     hash_count(h, kmer, seqhashtable, seqhashsize);
 
-  for(unsigned int i = k; i < seqlen; i++)
+  if (k == 31)
     {
-      if ((i & 31) == 0)
-	mem = *p++;
+      // tailored for k=31
+      for(unsigned int i = 31; i < seqlen; i++)
+	{
+	  if ((i & 31) == 0)
+	    mem = *p++;
 
-      uint64_t out = kmer & 3;
-      uint64_t in = mem & 3;
-      kmer >>= 2;
-      kmer |= in << (2*(k-1));
-      mem >>= 2;
+	  uint64_t out = kmer & 3;
+	  uint64_t in = mem & 3;
+	  kmer >>= 2;
+	  kmer |= in << 60;
+	  mem >>= 2;
 
-#ifdef FIXEDK31
-      h = hash_update_31(h, out, in);
-#else
-      h = hash_update(k, h, out, in);
-#endif
+	  h = hash_update_31(h, out, in);
 
-      if (bloomflex_get(bloom, h))
-	hash_count(h, kmer, seqhashtable, seqhashsize);
+	  if (bloomflex_get(bloom, h))
+	    hash_count(h, kmer, seqhashtable, seqhashsize);
+	}
+    }
+  else
+    {
+      for(unsigned int i = k; i < seqlen; i++)
+	{
+	  if ((i & 31) == 0)
+	    mem = *p++;
+
+	  uint64_t out = kmer & 3;
+	  uint64_t in = mem & 3;
+	  kmer >>= 2;
+	  kmer |= in << (2*(k-1));
+	  mem >>= 2;
+
+	  h = hash_update(k, h, out, in);
+
+	  if (bloomflex_get(bloom, h))
+	    hash_count(h, kmer, seqhashtable, seqhashsize);
+	}
     }
 }
 
@@ -226,6 +244,9 @@ void kmer_insert(unsigned int seqlen, char * seq, bloomflex_s * bloom, hashentry
     }
   else
     {
+      fprintf(logfile, "\nFatal error: Sequence length (%u) is different from given k (%u).\n", seqlen, k);
+      exit(1);
+
       for (unsigned int i = 0; i < seqlen; i++)
 	{
 	  uint64_t in = nt_extract(seq, i);
@@ -238,11 +259,7 @@ void kmer_insert(unsigned int seqlen, char * seq, bloomflex_s * bloom, hashentry
 	      if (i == k - 1)
 		h = hash_full(k, kmer);
 	      else
-#ifdef FIXEDK31
-		h = hash_update_31(h, out, in);
-#else
 		h = hash_update(k, h, out, in);
-#endif
 
 	      bloomflex_set(bloom, h);
 	      hash_insert(h, kmer, seqhashtable, seqhashsize);
@@ -251,9 +268,11 @@ void kmer_insert(unsigned int seqlen, char * seq, bloomflex_s * bloom, hashentry
     }
 }
 
-void kmercount(const char * kmer_filename, const char * seq_filename)
+void kmercount(const char * kmer_filename,
+	       const char * seq_filename,
+	       int opt_k)
 {
-  (void) kmer_filename;
+  k = opt_k;
 
   /* Read FASTA with kmers */
   fprintf(logfile, "Reading kmer file\n");
@@ -319,7 +338,7 @@ void kmercount(const char * kmer_filename, const char * seq_filename)
   /* Print kmers and counts to output file */
   unsigned int x = 0;
   uint64_t y = 0;
-  progress_init("Writing results", seqhashsize);
+  progress_init("Writing results:  ", seqhashsize);
   for (uint64_t i = 0; i < seqhashsize; i++)
     {
       struct hashentry * e = seqhashtable + i;

@@ -38,13 +38,14 @@ std::FILE * logfile {stderr};  // cstdio stderr macro is expanded to type std::F
 constexpr int n_options {26};
 std::array<int, n_options> used_options {{0}};  // set int values to zero by default
 
-char short_options[] = "hl:o:t:v"; /* unused: abcdefgijkmnpqrsuwxyz*/
+char short_options[] = "hk:l:o:t:v"; /* unused: abcdefgijmnpqrsuwxyz*/
 
 static struct option long_options[] =
   {
    {"help",                  no_argument,       nullptr, 'h' },
+   {"kmer-length",           required_argument, nullptr, 'k' },
    {"log",                   required_argument, nullptr, 'l' },
-   {"output-file",           required_argument, nullptr, 'o' },
+   {"output",                required_argument, nullptr, 'o' },
    {"threads",               required_argument, nullptr, 't' },
    {"version",               no_argument,       nullptr, 'v' },
    {nullptr,                 0,                 nullptr, 0 }
@@ -52,28 +53,24 @@ static struct option long_options[] =
 
 
 const std::vector<std::string> header_message
-  {"kmercount ", program_version,
-   "\n"};
+  {"Kmercount ", program_version,
+   "\n\n"};
 
 
 const std::vector<std::string> args_usage_message
   /*0         1         2         3         4         5         6         7          */
   /*01234567890123456789012345678901234567890123456789012345678901234567890123456789 */
-  {"Usage: kmercount [OPTIONS] KMERFILE [FASTAFILE]\n",
+  {"Usage: kmercount [OPTIONS] KMERFILENAME [SEQUENCEFILENAME]\n",
    "\n",
    "General options:\n",
-   " -h, --help                          display this help and exit\n",
-   " -t, --threads INTEGER               number of threads to use (1)\n",
-   " -v, --version                       display version information and exit\n",
+   " -h, --help                 display this help and exit\n",
+   " -k, --kmer-length INTEGER  kmer length [1-32] (31)\n",
+   " -t, --threads INTEGER      number of threads to use [1-1] (1)\n",
+   " -v, --version              display version information and exit\n",
    "\n",
    "Input/output options:\n",
-   " -l, --log FILENAME                  log to file, not to stderr\n",
-   " -o, --output-file FILENAME          output result to file (stdout)\n",
-   "\n",
-#ifndef __WIN32
-   "\n",
-   "See 'man kmercount' for more details.\n",
-#endif
+   " -l, --log FILENAME         log to file (stderr)\n",
+   " -o, --output FILENAME      output result to file (stdout)\n",
    "\n"
   };
 
@@ -86,10 +83,10 @@ void open_files();
 void close_files();
 
 
-auto args_long(char * str, const char * option) -> int64_t
+int64_t args_long(char * str, const char * option)
 {
-  static constexpr int base_value {10};
-  char * endptr {nullptr};
+  static const int base_value = 10;
+  char * endptr = nullptr;
   const int64_t temp = strtol(str, & endptr, base_value);
   if (*endptr != 0)
     {
@@ -106,14 +103,9 @@ auto args_long(char * str, const char * option) -> int64_t
 
 void args_show()
 {
-#ifdef __x86_64__
-  cpu_features_detect(p);
-  cpu_features_test(p);
-  cpu_features_show(p);
-#endif
-
   fprintf(logfile, "Kmer file:         %s\n", p.kmer_filename.c_str());
   fprintf(logfile, "Sequence file:     %s\n", p.seq_filename.c_str());
+  fprintf(logfile, "Kmer length:       %" PRId64 "\n", p.opt_k);
   fprintf(logfile, "Output file:       %s\n", p.opt_output_file.c_str());
   fprintf(logfile, "Threads:           %" PRId64 "\n", opt_threads);
   fprintf(logfile, "\n");
@@ -176,6 +168,11 @@ void args_init(int argc, char **argv, std::array<int, n_options> & used_options)
         p.opt_help = true;
         break;
 
+      case 'k':
+        /* kmer-length */
+        p.opt_k = args_long(optarg, "-k or --kmer-length");
+        break;
+
       case 'l':
         /* log */
         opt_log = optarg;
@@ -216,32 +213,42 @@ void args_init(int argc, char **argv, std::array<int, n_options> & used_options)
 	}
     }
   else
-    fatal("At least one filename must be specified (kmer file)");
+    {
+      if (! (p.opt_version || p.opt_help))
+	{
+	  fprintf(stderr, "No kmer filename given.\n\n");
+	  // No positional arguments, and neither -v nor -h: show help
+	  p.opt_help = true;
+	}
+    }
 }
 
 
 void args_check(std::array<int, n_options> & used_options) {
-  static constexpr unsigned int max_threads {256};
+  static constexpr unsigned int max_threads {1};
   // meaning of the used_options values
 
   (void) used_options;
 
   if ((opt_threads < 1) || (opt_threads > max_threads))
     {
-      fatal(error_prefix, "Illegal number of threads specified with "
-            "-t or --threads, must be in the range 1 to ", max_threads, ".");
+      fatal(error_prefix,
+	    "Illegal number of threads specified with -t or --threads.\n"
+	    "It must be in the range 1 to ", max_threads, ".");
     }
 
-  if (p.opt_version) {
-    show(header_message);
-    std::exit(EXIT_SUCCESS);
-  }
+  if (p.opt_help)
+    {
+      show(header_message);
+      show(args_usage_message);
+      std::exit(EXIT_SUCCESS);
+    }
 
-  if (p.opt_help) {
-    show(header_message);
-    show(args_usage_message);
-    std::exit(EXIT_SUCCESS);
-  }
+  if (p.opt_version)
+    {
+      show(header_message);
+      std::exit(EXIT_SUCCESS);
+    }
 }
 
 
@@ -283,6 +290,8 @@ auto main(int argc, char** argv) -> int
   open_files();
   show(header_message);
   args_show();
-  kmercount(p.kmer_filename.c_str(), p.seq_filename.c_str());
+  kmercount(p.kmer_filename.c_str(),
+	    p.seq_filename.c_str(),
+	    p.opt_k);
   close_files();
 }

@@ -115,7 +115,6 @@ static_assert(INT_MAX > INT16_MAX, "Your compiler uses very short integers.");
 /* constants */
 
 const std::string program_version {"0.0.1"};
-constexpr char sepchar {' '};
 constexpr char dash_filename {'-'};
 
 
@@ -136,6 +135,7 @@ extern queryinfo_t query;
 struct Parameters {
   bool opt_help {false};
   bool opt_version {false};
+  int64_t opt_k;
   std::string kmer_filename {dash_filename};
   std::string seq_filename {dash_filename};
   std::string opt_output_file {dash_filename};
@@ -173,4 +173,6 @@ inline auto nt_bytelength(unsigned int len) -> unsigned int
 
 /* functions in kmercount.cc */
 
-void kmercount(const char * kmer_filename, const char * seq_filename);
+void kmercount(const char * kmer_filename,
+	       const char * seq_filename,
+	       int k);

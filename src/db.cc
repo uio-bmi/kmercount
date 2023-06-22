@@ -106,7 +106,7 @@ struct db_s * db_read(const char * filename)
 
   if (! is_regular)
     {
-      fprintf(logfile, "Waiting for data... (hit Ctrl-C and run again with '-h' for help)\n");
+      fprintf(logfile, "Waiting for input data...\n");
     }
 
   size_t linecap = linealloc;
