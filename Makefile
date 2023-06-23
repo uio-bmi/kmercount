@@ -1,14 +1,22 @@
-# Makefile for kmercount
+# Makefile for Kmercount
 
-PROG=bin/kmercount
+ifndef PREFIX
+	PREFIX=/usr/local
+endif
 
-kmercount : $(PROG)
+all : kmercount
 
-$(PROG) :
+kmercount:
 	make -C src kmercount
 
-install : $(PROG) $(MAN)
-	/usr/bin/install -c $(PROG) '/usr/local/bin'
+test: kmercount
+	make -C test
 
-clean :
+install: kmercount test
+	/usr/bin/install -d $(PREFIX)/bin
+	/usr/bin/install -c src/kmercount $(PREFIX)/bin/kmercount
+
+clean:
 	make -C src clean
+	make -C test clean
+	rm -f *~
