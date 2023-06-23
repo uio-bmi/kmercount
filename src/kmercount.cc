@@ -318,7 +318,12 @@ int compare_kmers(const void * a, const void * b)
   else
     {
 #if 1
-      return 0;
+      if (x->kmer < y->kmer)
+	return -1;
+      else if (x->kmer > y->kmer)
+	return +1;
+      else
+	return 0;
 #else
       /* Too slow */
       /* Equal count, sort by sequence */
@@ -357,7 +362,7 @@ void print_results(hashentry * seqhashtable, uint64_t seqhashsize)
 	  if (e->count > 0)
 	  {
 	    fprintseq(outfile, e->kmer);
-	    fprintf(outfile,"\t%llu\n", e->count);
+	    fprintf(outfile,"\t%" PRIu64 "\n", e->count);
 	    x++;
 	    y += e->count;
 	  }
@@ -371,7 +376,7 @@ void print_results(hashentry * seqhashtable, uint64_t seqhashsize)
   progress_done();
 
   fprintf(logfile, "Matching kmers:    %u\n", x);
-  fprintf(logfile, "Total matches:     %llu\n", y);
+  fprintf(logfile, "Total matches:     %" PRIu64 "\n", y);
 }
 
 
@@ -411,7 +416,7 @@ void kmercount(const char * kmer_filename,
     }
   progress_done();
 
-  fprintf(logfile,   "Unique kmers:      %llu\n", unique);
+  fprintf(logfile,   "Unique kmers:      %" PRIu64 "\n", unique);
 
   db_free(kmer_db);
 
