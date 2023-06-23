@@ -30,13 +30,17 @@ Usage: kmercount [OPTIONS] KMERFILENAME [SEQUENCEFILENAME]
 General options:
  -h, --help                 display this help and exit
  -k, --kmer-length INTEGER  kmer length [1-32] (31)
- -t, --threads INTEGER      number of threads to use [1-256] (1)
+ -t, --threads INTEGER      number of threads to use [1-1] (1)
  -v, --version              display version information and exit
 
 Input/output options:
  -l, --log FILENAME         log to file (stderr)
  -o, --output FILENAME      output result to file (stdout)
 ```
+
+Use the `-h` or `--help` option to show some help information.
+
+Run the program with `-v` or `--version` for version information.
 
 The input file with the selected kmers must be specified as the first
 positional argument. It must be a FASTA formatted file with sequences
@@ -47,8 +51,6 @@ as the second postional argument. If not specified, or specified as
 `-`, the program will read from standard input. The input must be in
 FASTA format. The headers are ignored.
 
-Use the `-h` or `--help` option to show some help information.
-
 The kmer length may be specified with the `-k` or `--kmerlength`
 option. The length must be in the range from 1 to 32. The default kmer
 length is 31.
@@ -56,8 +58,6 @@ length is 31.
 The number of parallel threads requested may be specified with the
 `-t` or `--threads` option. However, the code is not multi-threaded,
 yet.
-
-Run the program with `-v` or `--version` for version information.
 
 While the program is running it will print some status and progress
 information to standard error (stderr) unless a log file has been
@@ -77,8 +77,8 @@ All input sequences must be nucleotide sequences. The letters
 `ACGTNacgtn` are accepted, but be aware that `N` and `n` are treated
 as `A`.
 
-The kmer sequences should be distinct. If they are not distinct, a
-warning will be given.
+The kmer sequences should be distinct. The number of distinct (unique)
+kmers will be shown.
 
 
 ## Example
@@ -86,8 +86,30 @@ warning will be given.
 Command line:
 
 ```
-kmercount -k 31 --output counts.tsv kmers.fasta seq.fasta
+kmercount -k 31 -o counts.tsv kmers.fasta seq.fasta
 ```
+
+The `kmers.fasta` file:
+
+```
+>kmer1
+AAGAAATGAGAAGTAATCAGAAAACCACTTA
+>kmer2
+AGAAATGAGAAGTAATCAGAAAACCACTTAA
+>kmer3
+GAAATGAGAAGTAATCAGAAAACCACTTAAG
+>kmer4
+AAATGAGAAGTAATCAGAAAACCACTTAAGG
+```
+
+
+The `seq.fasta` file:
+
+```
+>seq
+AAGAAATGAGAAGTAATCAGAAAACCACTTAAGG
+```
+
 
 Output to terminal:
 
@@ -97,7 +119,7 @@ Kmercount 0.0.1
 Kmer file:         kmers.fasta
 Sequence file:     seq.fasta
 Kmer length:       31
-Output file:       x
+Output file:       counts.tsv
 Threads:           1
 
 Reading kmer file
