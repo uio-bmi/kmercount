@@ -1,8 +1,8 @@
 # Kmercount
 
-Kmercount (`kmercount`) is a command line tool to count the number
-of occurences of a set of selected kmers in a set of sequences. A
-k-mer is defined as a continuous sequence of `k`
+Kmercount (`kmercount`) is a simple command line tool to quickly count
+the number of occurences of a set of selected kmers in a set of
+sequences. A k-mer is defined as a continuous sequence of `k`
 nucleotides. Kmercount will work with kmers of up to 32 nucleotides.
 
 Kmercount uses an efficient hash function, Bloom filter and hash
