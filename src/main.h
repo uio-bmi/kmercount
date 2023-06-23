@@ -135,7 +135,7 @@ extern queryinfo_t query;
 struct Parameters {
   bool opt_help {false};
   bool opt_version {false};
-  int64_t opt_k;
+  int64_t opt_k {31};
   std::string kmer_filename {dash_filename};
   std::string seq_filename {dash_filename};
   std::string opt_output_file {dash_filename};

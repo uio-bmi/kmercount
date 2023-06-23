@@ -56,7 +56,7 @@ struct bloomflex_s * bloomflex_init(const uint64_t size, const unsigned int k)
   /* Input size is in bytes for full bitmap */
 
   bloomflex_s * b = (struct bloomflex_s *) xmalloc(sizeof(struct bloomflex_s));
-  b->size = size / 8;
+  b->size = (size + 7) / 8;
   b->pattern_shift = 15;
   b->pattern_count = 1 << b->pattern_shift;
   b->pattern_mask = b->pattern_count - 1;

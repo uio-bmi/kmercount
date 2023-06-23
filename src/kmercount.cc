@@ -1,9 +1,38 @@
+/* Kmercounter using Bloom filter and rapid hash function */
+/* Author: Torbjørn Rognes */
+
 /* Works with kmers of length up to k=32 */
 /* Uses a 64 bit hash */
 
+/*
+  k=31
+  using bits 0-61, 2 bits per nucleotide
+  bit 0-1 encodes the first (1) nucleotide in the sequence
+  bit 60-61 encodes the last (31) nucleotide
+  A=00, C=01 G=10 T=11
+
+  Example sequence:
+  AAGAAATGAGAAGTAATCAGAAAACCACTTAAGG
+
+  Kmer 1:                         Encoding:
+  AAGAAATGAGAAGTAATCAGAAAACCACTTA 0f4500870e08b020
+
+  Kmer 2:
+  AGAAATGAGAAGTAATCAGAAAACCACTTAA 03d14021c3822c08
+
+  Kmer 3:
+  GAAATGAGAAGTAATCAGAAAACCACTTAAG 20f4500870e08b02
+
+  Kmer 4:
+  AAATGAGAAGTAATCAGAAAACCACTTAAGG 283d14021c3822c0
+
+*/
+
 #include "main.h"
 
-static unsigned int k = 31;
+static unsigned int k = 31; // Default 31
+
+static uint64_t unique = 0;
 
 struct hashentry
 {
@@ -39,6 +68,20 @@ inline uint64_t rotate_left_64(uint64_t x, unsigned int r)
   return (x << r) | (x >> (64 - r));
 }
 
+inline uint64_t reverse_nucleotides(unsigned int k, uint64_t kmer)
+{
+  uint64_t res = 0;
+  uint64_t x = kmer;
+  for (unsigned int i = 0; i < k; i++)
+    {
+      uint64_t t = x & 3;
+      x >>= 2;
+      res <<= 2;
+      res |= t;
+    }
+  return res;
+}
+
 uint64_t hash_full(unsigned int k, uint64_t kmer)
 {
   /* compute 64 bit rolling hash of given k-mer from scratch */
@@ -49,8 +92,9 @@ uint64_t hash_full(unsigned int k, uint64_t kmer)
     {
       /* rotate hash */
       hash = rotate_left_64(hash, shift_factor);
+
       /* insert value coming in */
-      uint64_t in = (kmer >> ((k - 1 - i) << 1)) & 3;
+      uint64_t in = (kmer >> (i << 1)) & 3;
       hash ^= hashvalues[in];
     }
 
@@ -91,10 +135,6 @@ inline uint64_t hash_update_31(uint64_t h, uint64_t out, uint64_t in)
   return hash;
 }
 
-static uint64_t duplicates = 0;
-static uint64_t unique = 0;
-FILE * fp_index = nullptr;
-
 void hash_insert(uint64_t hash,
 		 uint64_t kmer,
 		 hashentry *  seqhashtable,
@@ -108,7 +148,7 @@ void hash_insert(uint64_t hash,
 
       if (kmerfound == (uint64_t) - 1)
 	{
-	  /* free slot, not seen before, insert new */
+	  /* free slot, not seen before, insert new, zero count */
 	  seqhashtable[seqhashindex].kmer = kmer;
 	  seqhashtable[seqhashindex].count = 0;
 	  unique++;
@@ -118,7 +158,6 @@ void hash_insert(uint64_t hash,
       if (kmerfound == kmer)
 	{
 	  /* slot in use, with match */
-	  duplicates++;
 	  return;
 	}
 
@@ -164,7 +203,6 @@ void kmer_check(unsigned int seqlen, char * seq, bloomflex_s * bloom, hashentry 
     return;
 
   /* first kmer */
-  /* zero two upper bits */
   uint64_t * p = (uint64_t *) seq;
   uint64_t mem = *p++;
   kmer = mem;
@@ -190,7 +228,6 @@ void kmer_check(unsigned int seqlen, char * seq, bloomflex_s * bloom, hashentry 
 	  mem >>= 2;
 
 	  h = hash_update_31(h, out, in);
-
 	  if (bloomflex_get(bloom, h))
 	    hash_count(h, kmer, seqhashtable, seqhashsize);
 	}
@@ -209,7 +246,6 @@ void kmer_check(unsigned int seqlen, char * seq, bloomflex_s * bloom, hashentry 
 	  mem >>= 2;
 
 	  h = hash_update(k, h, out, in);
-
 	  if (bloomflex_get(bloom, h))
 	    hash_count(h, kmer, seqhashtable, seqhashsize);
 	}
@@ -246,27 +282,78 @@ void kmer_insert(unsigned int seqlen, char * seq, bloomflex_s * bloom, hashentry
     {
       fprintf(logfile, "\nFatal error: Sequence length (%u) is different from given k (%u).\n", seqlen, k);
       exit(1);
-
-      for (unsigned int i = 0; i < seqlen; i++)
-	{
-	  uint64_t in = nt_extract(seq, i);
-	  uint64_t out = kmer & 3;
-	  kmer >>= 2ULL;
-	  kmer |= (in << (2ULL * (k - 1ULL)));
-
-	  if (i >= k - 1)
-	    {
-	      if (i == k - 1)
-		h = hash_full(k, kmer);
-	      else
-		h = hash_update(k, h, out, in);
-
-	      bloomflex_set(bloom, h);
-	      hash_insert(h, kmer, seqhashtable, seqhashsize);
-	    }
-	}
     }
 }
+
+int compare_kmers(const void * a, const void * b)
+{
+  const struct hashentry * x = (struct hashentry *)(a);
+  const struct hashentry * y = (struct hashentry *)(b);
+
+  // Compare kmer counts, sort by decending order
+  if (x->count > y->count)
+    return -1;
+  else if (x->count < y->count)
+    return +1;
+  else
+    {
+#if 1
+      return 0;
+#else
+      /* Too slow */
+      /* Equal count, sort by sequence */
+      uint64_t e = reverse_nucleotides(k, x->kmer);
+      uint64_t f = reverse_nucleotides(k, y->kmer);
+      if (e < f)
+	return -1;
+      else if (e > f)
+	return +1;
+      else
+	return 0;
+#endif
+    }
+}
+
+void print_results(hashentry * seqhashtable, uint64_t seqhashsize)
+{
+  fprintf(logfile, "\n");
+
+  progress_init("Sorting results:  ", 1);
+  qsort(seqhashtable,
+	seqhashsize,
+	sizeof(struct hashentry),
+	compare_kmers);
+  progress_done();
+
+  /* Print kmers and counts to output file */
+  unsigned int x = 0;
+  uint64_t y = 0;
+  progress_init("Writing results:  ", seqhashsize);
+  for (uint64_t i = 0; i < seqhashsize; i++)
+    {
+      struct hashentry * e = seqhashtable + i;
+      if (e->kmer != (uint64_t)-1)
+	{
+	  if (e->count > 0)
+	  {
+	    fprintseq(outfile, e->kmer);
+	    fprintf(outfile,"\t%llu\n", e->count);
+	    x++;
+	    y += e->count;
+	  }
+	  else
+	    break;
+	}
+      else
+	break;
+      progress_update(i);
+    }
+  progress_done();
+
+  fprintf(logfile, "Matching kmers:    %u\n", x);
+  fprintf(logfile, "Total matches:     %llu\n", y);
+}
+
 
 void kmercount(const char * kmer_filename,
 	       const char * seq_filename,
@@ -289,7 +376,7 @@ void kmercount(const char * kmer_filename,
   for (uint64_t j = 0; j < seqhashsize; j++)
     {
       seqhashtable[j].count = 0;
-      seqhashtable[j].kmer = -1;
+      seqhashtable[j].kmer = (uint64_t) -1;
     }
 
   /* compute hash for all kmers and store them in bloom & hash table */
@@ -305,8 +392,6 @@ void kmercount(const char * kmer_filename,
   progress_done();
 
   fprintf(logfile,   "Unique kmers:      %llu\n", unique);
-  if (duplicates > 0)
-    fprintf(logfile, "Duplicates:        %llu\n", duplicates);
 
   db_free(kmer_db);
 
@@ -332,36 +417,7 @@ void kmercount(const char * kmer_filename,
     }
   progress_done();
 
-  fprintf(logfile, "\n");
-
-
-  /* Print kmers and counts to output file */
-  unsigned int x = 0;
-  uint64_t y = 0;
-  progress_init("Writing results:  ", seqhashsize);
-  for (uint64_t i = 0; i < seqhashsize; i++)
-    {
-      struct hashentry * e = seqhashtable + i;
-      if (e->kmer != (uint64_t)-1)
-	if (e->count > 0)
-	  {
-#if 0
-	    fprintf(outfile, ">kmer%u\n", x+1);
-	    fprintseq(outfile, e->kmer);
-	    fprintf(outfile, "\n");
-#else
-	    fprintseq(outfile, e->kmer);
-	    fprintf(outfile,"\t%llu\n", e->count);
-#endif
-	    x++;
-	    y += e->count;
-	  }
-      progress_update(i);
-    }
-  progress_done();
-
-  fprintf(logfile, "Matching kmers:    %u\n", x);
-  fprintf(logfile, "Total matches:     %llu\n", y);
+  print_results(seqhashtable, seqhashsize);
 
   delete [] seqhashtable;
   seqhashtable = nullptr;

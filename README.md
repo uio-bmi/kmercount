@@ -1,8 +1,12 @@
 # Kmercounter
 
-Kmercounter (`kmercounter`) is a command line tool to count the number of occurences of a set of selected kmers in a set of sequences. A k-mer is defined as a continuous sequence of `k` nucleotides. Kmercounter will work with kmers of up to 32 nucleotides.
+Kmercounter (`kmercounter`) is a command line tool to count the number
+of occurences of a set of selected kmers in a set of sequences. A
+k-mer is defined as a continuous sequence of `k`
+nucleotides. Kmercounter will work with kmers of up to 32 nucleotides.
 
-Kmercounter uses an efficient hash function, Bloom filter and hash table to perform the counting rapidly.
+Kmercounter uses an efficient hash function, Bloom filter and hash
+table to perform the counting rapidly.
 
 
 ## Compilation and installation
@@ -61,7 +65,10 @@ specified with the `-l` or `--log` option. Error messages and warnings
 will also be written here.
 
 The results will be written to standard output (stdout) unless a file
-name has been specified with the `-o` or `--output` option.
+name has been specified with the `-o` or `--output` option. The output
+is a plain text file with tab-separated values. The first column
+contains the kmer sequences, while the second column contains the
+counts.
 
 
 ## General information
@@ -79,7 +86,7 @@ warning will be given.
 Command line:
 
 ```
-kmercount --kmer-length 31 --output counts.tsv kmers50m.fasta human30M.fasta
+kmercount -k 31 --output counts.tsv kmers.fasta seq.fasta
 ```
 
 Output to terminal:
@@ -87,41 +94,36 @@ Output to terminal:
 ```
 Kmercount 0.0.1
 
-Kmer file:         kmers50m.fasta
-Sequence file:     human30M.fasta
+Kmer file:         kmers.fasta
+Sequence file:     seq.fasta
 Kmer length:       31
-Output file:       counts.tsv
+Output file:       x
 Threads:           1
 
 Reading kmer file
 Reading sequences: 100%  
-Indexing database: 100%  
-Database info:     1550000000 nt in 50000000 sequences, longest 31 nt
-Indexing kmers:    100%  
-Unique kmers:      50000000
+Indexing database: 100% 
+Database info:     124 nt in 4 sequences, longest 31 nt
+Indexing kmers:    100% 
+Unique kmers:      4
 
 Reading sequence file
 Reading sequences: 100%  
-Indexing database: 100%  
-Database info:     3030000000 nt in 30000000 sequences, longest 101 nt
+Indexing database: 100%
+Database info:     34 nt in 1 sequences, longest 34 nt
 Counting matches:  100%  
 
-Writing results:   100%  
-Matching kmers:    93468
-Total matches:     1903965
+Sorting results:   100%
+Writing results:   100% 
+Matching kmers:    4
+Total matches:     4
 ```
 
 Output to `counts.tsv` (only first 10 lines shown):
 
 ```
-AAATGGGCTAAATGCTCCAATTAAAAGACAC	45
-GTAATCCCAGCACTTTGGAAGGCCGAGGCAG	15
-GACAGAGAGCCAAATCATGAGTGAACTCCCA	15
-AGATCACTTGAGGCCAGGAGTTCAAGACCAG	15
-TTGGTGCAGAGCTGAGTTCAATTCCTGGGTA	15
-AAATACAAAAATTAGCCAGGTGTGGTGGCAC	60
-CACATCACACTTATTCCAAAATTGACCACAT	15
-TGAGGTTTTGGGACTCAGACTGGCTTCCTTG	15
-GGATCTCACTCTGTTGCCCAGGCTAGAGTGC	15
-CTTGAGGTGTCAGTGGCAGATAGAGATGCTG	15
+AAATGAGAAGTAATCAGAAAACCACTTAAGG	1
+AGAAATGAGAAGTAATCAGAAAACCACTTAA	1
+AAGAAATGAGAAGTAATCAGAAAACCACTTA	1
+GAAATGAGAAGTAATCAGAAAACCACTTAAG	1
 ```
