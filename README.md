@@ -68,7 +68,7 @@ The results will be written to standard output (stdout) unless a file
 name has been specified with the `-o` or `--output` option. The output
 is a plain text file with tab-separated values. The first column
 contains the kmer sequences, while the second column contains the
-counts.
+counts. The kmers are sorted by descending number of occurences.
 
 
 ## General information
