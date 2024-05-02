@@ -226,8 +226,9 @@ void kmer_check(unsigned int seqlen, char * seq, bloomflex_s * bloom, hashentry 
   uint64_t * p = (uint64_t *) seq;
   uint64_t mem = *p++;
   kmer = mem;
-  kmer &= 0x3fffffffffffffff;
-  mem >>= 62;
+
+  kmer &= (1ULL << 2*k) - 1;
+  mem >>= 2*k;
 
   h = hash_full(k, kmer);
   if (bloomflex_get(bloom, h))
