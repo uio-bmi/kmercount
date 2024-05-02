@@ -23,7 +23,7 @@ dependencies except for the C and C++ standard libraries.
 Here are the Kmercount options:
 
 ```
-Kmercount 0.0.1
+Kmercount 0.0.2
 
 Usage: kmercount [OPTIONS] KMERFILENAME [SEQUENCEFILENAME]
 
@@ -114,7 +114,7 @@ AAGAAATGAGAAGTAATCAGAAAACCACTTAAGG
 Output to terminal:
 
 ```
-Kmercount 0.0.1
+Kmercount 0.0.2
 
 Kmer file:         kmers.fasta
 Sequence file:     seq.fasta
